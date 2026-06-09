@@ -20,6 +20,7 @@ Run: python serial_simulator.py
 
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+import tkinter.font as tkfont
 import threading
 import time
 import json
@@ -29,6 +30,22 @@ import sys
 
 # default directory for save/load dialogs: <script dir>/ConfigFiles
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ConfigFiles")
+
+# ---- light theme palette (blue accent) ----
+COL_BG = "#eef1f5"        # window background
+COL_CARD = "#ffffff"      # card / panel background
+COL_TEXT = "#1f2937"      # primary text
+COL_MUTED = "#6b7280"     # secondary text
+COL_BORDER = "#d1d5db"    # borders
+COL_ACCENT = "#2563eb"    # primary accent (blue)
+COL_ACCENT_HOVER = "#1d4ed8"
+COL_DANGER = "#dc2626"
+COL_DANGER_HOVER = "#b91c1c"
+COL_SUCCESS = "#16a34a"   # green (send actions)
+COL_SUCCESS_HOVER = "#15803d"
+COL_CRC = "#eceff3"       # CRC cell field (greyed)
+COL_RESP = "#eef4ff"      # response cell field (light blue)
+COL_RESP_ERR = "#fde2e2"  # response cell field when no reply (light red)
 
 try:
     import serial
@@ -57,8 +74,11 @@ def compute_crc16_modbus(data: bytes) -> int:
 class SerialSimulator(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Verdant Simulator")
-        self.geometry("750x550")
+        self.title("Modbus Simulator")
+        self.geometry("820x600")
+        self.minsize(720, 520)
+
+        self._apply_theme()
 
         # ensure the config folder exists for save/load dialogs
         os.makedirs(CONFIG_DIR, exist_ok=True)
@@ -72,94 +92,208 @@ class SerialSimulator(tk.Tk):
 
         self._build_ui()
 
-    def _build_ui(self):
-        # Top frame: port selection and config
-        top = ttk.Frame(self)
-        top.pack(fill=tk.X, padx=8, pady=6)
+    def _apply_theme(self):
+        """Apply a modern light theme (blue accent) on the clam base theme."""
+        self.configure(bg=COL_BG)
 
-        ttk.Label(top, text="Port:").grid(row=0, column=0, sticky=tk.W)
+        # base + heading fonts (Segoe UI is the Windows 11 system font)
+        self.base_font = tkfont.Font(family="Segoe UI", size=10)
+        self.bold_font = tkfont.Font(family="Segoe UI", size=10, weight="bold")
+        self.title_font = tkfont.Font(family="Segoe UI", size=15, weight="bold")
+        self.option_add("*Font", self.base_font)
+
+        style = ttk.Style(self)
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            pass
+
+        # generic widgets
+        style.configure(".", background=COL_BG, foreground=COL_TEXT, font=self.base_font)
+        style.configure("TFrame", background=COL_BG)
+        style.configure("Card.TFrame", background=COL_CARD)
+        style.configure("TLabel", background=COL_BG, foreground=COL_TEXT)
+        style.configure("Card.TLabel", background=COL_CARD, foreground=COL_TEXT)
+        style.configure("TCheckbutton", background=COL_CARD, foreground=COL_TEXT)
+        style.map("TCheckbutton",
+                  background=[("active", COL_CARD)],
+                  indicatorcolor=[("selected", COL_ACCENT)])
+
+        # cards (LabelFrame)
+        style.configure("Card.TLabelframe", background=COL_CARD,
+                        bordercolor=COL_BORDER, relief="solid", borderwidth=1)
+        style.configure("Card.TLabelframe.Label", background=COL_CARD,
+                        foreground=COL_ACCENT, font=self.bold_font)
+
+        # inputs
+        for ent in ("TEntry", "TCombobox", "TSpinbox"):
+            style.configure(ent, fieldbackground=COL_CARD, background=COL_CARD,
+                            foreground=COL_TEXT, bordercolor=COL_BORDER,
+                            arrowcolor=COL_TEXT)
+        style.map("TCombobox", fieldbackground=[("readonly", COL_CARD)],
+                  foreground=[("readonly", COL_TEXT)])
+        # combobox dropdown list colors
+        self.option_add("*TCombobox*Listbox.background", COL_CARD)
+        self.option_add("*TCombobox*Listbox.foreground", COL_TEXT)
+        self.option_add("*TCombobox*Listbox.selectBackground", COL_ACCENT)
+        self.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
+
+        # read-only matrix cell variants
+        style.configure("Crc.TEntry", fieldbackground=COL_CRC, foreground=COL_MUTED)
+        style.map("Crc.TEntry", fieldbackground=[("readonly", COL_CRC)],
+                  foreground=[("readonly", COL_MUTED)])
+        style.configure("Resp.TEntry", fieldbackground=COL_RESP, foreground=COL_TEXT)
+        style.map("Resp.TEntry", fieldbackground=[("readonly", COL_RESP)],
+                  foreground=[("readonly", COL_TEXT)])
+        style.configure("RespErr.TEntry", fieldbackground=COL_RESP_ERR, foreground="#991b1b")
+        style.map("RespErr.TEntry", fieldbackground=[("readonly", COL_RESP_ERR)],
+                  foreground=[("readonly", "#991b1b")])
+
+        # buttons
+        style.configure("TButton", background="#e5e7eb", foreground=COL_TEXT,
+                        bordercolor=COL_BORDER, focuscolor=COL_BG,
+                        padding=(10, 5), relief="flat")
+        style.map("TButton", background=[("active", "#d1d5db")])
+
+        style.configure("Accent.TButton", background=COL_ACCENT, foreground="#ffffff",
+                        bordercolor=COL_ACCENT, padding=(12, 5), relief="flat")
+        style.map("Accent.TButton",
+                  background=[("pressed", COL_ACCENT_HOVER), ("active", COL_ACCENT_HOVER)],
+                  foreground=[("disabled", "#e5e7eb")])
+
+        style.configure("Danger.TButton", background=COL_DANGER, foreground="#ffffff",
+                        bordercolor=COL_DANGER, padding=(12, 5), relief="flat")
+        style.map("Danger.TButton",
+                  background=[("pressed", COL_DANGER_HOVER), ("active", COL_DANGER_HOVER)])
+
+        # green "go" buttons: Send All and per-row Send
+        style.configure("Success.TButton", background=COL_SUCCESS, foreground="#ffffff",
+                        bordercolor=COL_SUCCESS, padding=(12, 5), relief="flat")
+        style.map("Success.TButton",
+                  background=[("pressed", COL_SUCCESS_HOVER), ("active", COL_SUCCESS_HOVER)],
+                  foreground=[("disabled", "#e5e7eb")])
+
+        style.configure("Send.TButton", background=COL_SUCCESS, foreground="#ffffff",
+                        bordercolor=COL_SUCCESS, padding=(6, 2), relief="flat")
+        style.map("Send.TButton",
+                  background=[("pressed", COL_SUCCESS_HOVER), ("active", COL_SUCCESS_HOVER)])
+
+        # matrix labels
+        style.configure("Header.TLabel", background=COL_CARD, foreground=COL_ACCENT,
+                        font=self.bold_font)
+        style.configure("Packet.TLabel", background=COL_CARD, foreground=COL_MUTED,
+                        font=self.bold_font)
+
+        # banner + status bar
+        style.configure("Banner.TFrame", background=COL_ACCENT)
+        style.configure("Banner.TLabel", background=COL_ACCENT, foreground="#ffffff",
+                        font=self.title_font)
+        style.configure("Status.TLabel", background="#dcfce7", foreground="#166534",
+                        padding=(8, 4))
+
+        # scrollbar
+        style.configure("TScrollbar", background=COL_BG, troughcolor=COL_BG,
+                        bordercolor=COL_BG, arrowcolor=COL_TEXT)
+
+    def _build_ui(self):
+        # header banner
+        banner = ttk.Frame(self, style="Banner.TFrame")
+        banner.pack(fill=tk.X)
+        ttk.Label(banner, text="Modbus Simulator",
+                  style="Banner.TLabel").pack(side=tk.LEFT, padx=12, pady=8)
+
+        # Connection card: port selection and serial config
+        top = ttk.LabelFrame(self, text="Connection", style="Card.TLabelframe", padding=10)
+        top.pack(fill=tk.X, padx=10, pady=(8, 4))
+
+        ttk.Label(top, text="Port:", style="Card.TLabel").grid(row=0, column=0, sticky=tk.W, padx=4, pady=3)
         self.port_var = tk.StringVar()
         self.port_combo = ttk.Combobox(top, textvariable=self.port_var, width=25, state='readonly')
-        self.port_combo.grid(row=0, column=1, sticky=tk.W)
+        self.port_combo.grid(row=0, column=1, sticky=tk.W, padx=4, pady=3)
 
         self.refresh_btn = ttk.Button(top, text="Refresh", command=self.refresh_ports)
-        self.refresh_btn.grid(row=0, column=2, padx=6)
+        self.refresh_btn.grid(row=0, column=2, padx=6, pady=3)
 
-        self.open_btn = ttk.Button(top, text="Open", command=self.toggle_open)
-        self.open_btn.grid(row=0, column=3, padx=6)
+        self.open_btn = ttk.Button(top, text="Open", style="Accent.TButton", command=self.toggle_open)
+        self.open_btn.grid(row=0, column=3, padx=6, pady=3)
 
-        ttk.Label(top, text="Baud:").grid(row=1, column=0, sticky=tk.W)
+        ttk.Label(top, text="Baud:", style="Card.TLabel").grid(row=1, column=0, sticky=tk.W, padx=4, pady=3)
         self.baud_var = tk.StringVar(value="9600")
         self.baud_combo = ttk.Combobox(top, textvariable=self.baud_var, values=["9600","19200","38400","57600","115200"], width=10, state='readonly')
-        self.baud_combo.grid(row=1, column=1, sticky=tk.W)
+        self.baud_combo.grid(row=1, column=1, sticky=tk.W, padx=4, pady=3)
 
-        ttk.Label(top, text="Parity:").grid(row=1, column=2, sticky=tk.W)
+        ttk.Label(top, text="Parity:", style="Card.TLabel").grid(row=1, column=2, sticky=tk.W, padx=4, pady=3)
         self.parity_var = tk.StringVar(value='N')
         self.parity_combo = ttk.Combobox(top, textvariable=self.parity_var, values=['N','E','O','M','S'], width=6, state='readonly')
-        self.parity_combo.grid(row=1, column=3, sticky=tk.W)
+        self.parity_combo.grid(row=1, column=3, sticky=tk.W, padx=4, pady=3)
 
-        ttk.Label(top, text="Stop bits:").grid(row=2, column=2, sticky=tk.W)
+        ttk.Label(top, text="Stop bits:", style="Card.TLabel").grid(row=2, column=2, sticky=tk.W, padx=4, pady=3)
         self.stop_var = tk.StringVar(value='1')
         self.stop_combo = ttk.Combobox(top, textvariable=self.stop_var, values=['1','1.5','2'], width=6, state='readonly')
-        self.stop_combo.grid(row=2, column=3, sticky=tk.W)
+        self.stop_combo.grid(row=2, column=3, sticky=tk.W, padx=4, pady=3)
 
-        ttk.Label(top, text="Bytes:").grid(row=3, column=0, sticky=tk.W)
+        # Matrix & Config card: matrix size + save/load
+        cfg = ttk.LabelFrame(self, text="Matrix & Config", style="Card.TLabelframe", padding=10)
+        cfg.pack(fill=tk.X, padx=10, pady=4)
+
+        ttk.Label(cfg, text="Bytes:", style="Card.TLabel").grid(row=0, column=0, sticky=tk.W, padx=4, pady=3)
         self.cols_var = tk.IntVar(value=8)
         # enforce at least 2 bytes so last two can be CRC
-        self.cols_spin = ttk.Spinbox(top, from_=2, to=64, textvariable=self.cols_var, width=6)
-        self.cols_spin.grid(row=3, column=1, sticky=tk.W)
+        self.cols_spin = ttk.Spinbox(cfg, from_=2, to=64, textvariable=self.cols_var, width=6)
+        self.cols_spin.grid(row=0, column=1, sticky=tk.W, padx=4, pady=3)
 
-        ttk.Label(top, text="Packets:").grid(row=4, column=0, sticky=tk.W)
-        self.rows_var = tk.IntVar(value=5)
-        self.rows_spin = ttk.Spinbox(top, from_=1, to=256, textvariable=self.rows_var, width=6)
-        self.rows_spin.grid(row=4, column=1, sticky=tk.W)
+        ttk.Label(cfg, text="Packets:", style="Card.TLabel").grid(row=1, column=0, sticky=tk.W, padx=4, pady=3)
+        self.rows_var = tk.IntVar(value=1)
+        self.rows_spin = ttk.Spinbox(cfg, from_=1, to=256, textvariable=self.rows_var, width=6)
+        self.rows_spin.grid(row=1, column=1, sticky=tk.W, padx=4, pady=3)
 
-        self.apply_matrix_btn = ttk.Button(top, text="Apply Matrix Size", command=self.build_matrix)
-        self.apply_matrix_btn.grid(row=4, column=2, columnspan=2, sticky=tk.W)
+        self.apply_matrix_btn = ttk.Button(cfg, text="Apply Matrix Size", style="Accent.TButton", command=self.build_matrix)
+        self.apply_matrix_btn.grid(row=0, column=2, rowspan=2, sticky=tk.W, padx=12, pady=3)
 
-        self.save_btn = ttk.Button(top, text="Save Config", command=self.save_config)
-        self.save_btn.grid(row=3, column=2, sticky=tk.W, padx=6)
+        self.save_btn = ttk.Button(cfg, text="Save Config", command=self.save_config)
+        self.save_btn.grid(row=0, column=3, sticky=tk.W, padx=6, pady=3)
 
-        self.load_btn = ttk.Button(top, text="Load Config", command=self.load_config)
-        self.load_btn.grid(row=3, column=3, sticky=tk.W, padx=6)
+        self.load_btn = ttk.Button(cfg, text="Load Config", command=self.load_config)
+        self.load_btn.grid(row=1, column=3, sticky=tk.W, padx=6, pady=3)
 
         # Middle frame: matrix canvas
         mid = ttk.Frame(self)
-        mid.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
+        mid.pack(fill=tk.BOTH, expand=True, padx=10, pady=4)
 
-        self.canvas = tk.Canvas(mid)
+        self.canvas = tk.Canvas(mid, bg=COL_CARD, highlightthickness=1,
+                                highlightbackground=COL_BORDER)
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         vsb = ttk.Scrollbar(mid, orient="vertical", command=self.canvas.yview)
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
         self.canvas.configure(yscrollcommand=vsb.set)
 
-        self.matrix_frame = ttk.Frame(self.canvas)
+        self.matrix_frame = ttk.Frame(self.canvas, style="Card.TFrame")
         self.canvas.create_window((0,0), window=self.matrix_frame, anchor='nw')
         self.matrix_frame.bind('<Configure>', lambda e: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
 
-        # Bottom frame: send controls
-        bot = ttk.Frame(self)
-        bot.pack(fill=tk.X, padx=8, pady=6)
+        # Send card: send controls
+        bot = ttk.LabelFrame(self, text="Send", style="Card.TLabelframe", padding=10)
+        bot.pack(fill=tk.X, padx=10, pady=4)
 
         # interval_var now represents group delay (ms) after whole group of packets is sent
         # inter-packet delay is fixed at 3000 ms (Modbus-like pacing)
         self.interval_var = tk.IntVar(value=3000)  # ms (group delay)
-        ttk.Label(bot, text="Group delay (ms) after all packets sent:").grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(bot, text="Group delay (ms) after all packets sent:", style="Card.TLabel").grid(row=0, column=0, sticky=tk.W, padx=4, pady=3)
         self.interval_entry = ttk.Entry(bot, textvariable=self.interval_var, width=8)
-        self.interval_entry.grid(row=0, column=1, sticky=tk.W)
+        self.interval_entry.grid(row=0, column=1, sticky=tk.W, padx=4, pady=3)
 
         self.continuous_var = tk.BooleanVar(value=False)
         self.continuous_check = ttk.Checkbutton(bot, text="Continuous", variable=self.continuous_var)
-        self.continuous_check.grid(row=0, column=2, padx=8)
+        self.continuous_check.grid(row=0, column=2, padx=12, pady=3)
 
-        self.send_btn = ttk.Button(bot, text="Send All", command=self.on_send)
-        self.send_btn.grid(row=0, column=3, padx=8)
+        self.send_btn = ttk.Button(bot, text="Send All", style="Success.TButton", command=self.on_send)
+        self.send_btn.grid(row=0, column=3, padx=8, pady=3)
 
-        self.stop_btn = ttk.Button(bot, text="Stop", command=self.stop_sending)
-        self.stop_btn.grid(row=0, column=4, padx=8)
+        self.stop_btn = ttk.Button(bot, text="Stop", style="Danger.TButton", command=self.stop_sending)
+        self.stop_btn.grid(row=0, column=4, padx=8, pady=3)
 
-        self.status_label = ttk.Label(self, text="Status: idle")
+        self.status_label = ttk.Label(self, text="Status: idle", style="Status.TLabel", anchor=tk.W)
         self.status_label.pack(side=tk.BOTTOM, fill=tk.X)
 
         # matrix storage
@@ -232,28 +366,29 @@ class SerialSimulator(tk.Tk):
 
         # header
         for c in range(cols):
-            lbl = ttk.Label(self.matrix_frame, text=f"Byte{c}", borderwidth=1)
-            lbl.grid(row=0, column=c+1, padx=2, pady=2)
+            lbl = ttk.Label(self.matrix_frame, text=f"Byte{c}", style="Header.TLabel")
+            lbl.grid(row=0, column=c+1, padx=2, pady=4)
         # header for custom text column (notes only, not sent)
-        lbl = ttk.Label(self.matrix_frame, text="Reg Name", borderwidth=1)
-        lbl.grid(row=0, column=cols+1, padx=2, pady=2)
+        lbl = ttk.Label(self.matrix_frame, text="Reg Name", style="Header.TLabel")
+        lbl.grid(row=0, column=cols+1, padx=2, pady=4)
         # header for the response column
-        lbl = ttk.Label(self.matrix_frame, text="Response", borderwidth=1)
-        lbl.grid(row=0, column=cols+2, padx=2, pady=2)
+        lbl = ttk.Label(self.matrix_frame, text="Response", style="Header.TLabel")
+        lbl.grid(row=0, column=cols+2, padx=2, pady=4)
         # header for the per-row send button column
-        lbl = ttk.Label(self.matrix_frame, text="", borderwidth=1)
-        lbl.grid(row=0, column=cols+3, padx=2, pady=2)
+        lbl = ttk.Label(self.matrix_frame, text="", style="Header.TLabel")
+        lbl.grid(row=0, column=cols+3, padx=2, pady=4)
 
         for r in range(rows):
-            lbl = ttk.Label(self.matrix_frame, text=f"Packet{r}", borderwidth=1)
-            lbl.grid(row=r+1, column=0, padx=2, pady=2)
+            lbl = ttk.Label(self.matrix_frame, text=f"Packet{r}", style="Packet.TLabel")
+            lbl.grid(row=r+1, column=0, padx=6, pady=2)
             row_widgets = []
             for c in range(cols):
-                e = ttk.Entry(self.matrix_frame, width=6)
+                e = ttk.Entry(self.matrix_frame, width=6, justify=tk.CENTER)
                 e.grid(row=r+1, column=c+1, padx=2, pady=1)
                 # default with zeros
                 if c >= cols - 2:
                     # last two columns are CRC bytes: readonly and auto-updated
+                    e.configure(style="Crc.TEntry")
                     e.insert(0, "00")
                     try:
                         e.state(['readonly'])
@@ -277,7 +412,7 @@ class SerialSimulator(tk.Tk):
             note_entry.insert(0, old_notes[r] if r < len(old_notes) else "")
             self.text_widgets.append(note_entry)
             # response field for this row (read-only, filled after a send)
-            resp_entry = ttk.Entry(self.matrix_frame, width=24)
+            resp_entry = ttk.Entry(self.matrix_frame, width=24, style="Resp.TEntry")
             resp_entry.grid(row=r+1, column=cols+2, padx=2, pady=1)
             try:
                 resp_entry.state(['readonly'])
@@ -286,8 +421,9 @@ class SerialSimulator(tk.Tk):
             self.response_widgets.append(resp_entry)
             # per-row send button: sends only this packet
             row_send_btn = ttk.Button(self.matrix_frame, text="Send", width=6,
+                                      style="Send.TButton",
                                       command=lambda rr=r: self.send_single(rr))
-            row_send_btn.grid(row=r+1, column=cols+3, padx=2, pady=1)
+            row_send_btn.grid(row=r+1, column=cols+3, padx=4, pady=1)
 
         # compute CRCs for all rows initially
         self._update_all_crcs()
@@ -446,6 +582,8 @@ class SerialSimulator(tk.Tk):
                 pass
         entry.delete(0, tk.END)
         entry.insert(0, text)
+        # light-red field when no reply, normal light-blue otherwise
+        entry.configure(style="RespErr.TEntry" if text == "(no response)" else "Resp.TEntry")
         try:
             entry.state(['readonly'])
         except Exception:

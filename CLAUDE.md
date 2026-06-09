@@ -62,3 +62,20 @@ Concepts that span the code:
 - **Save/Load config.** `save_config()`/`load_config()` persist serial settings, matrix size,
   byte data, and notes as JSON (CRC excluded — recomputed on load). Dialogs default to
   `CONFIG_DIR` = `<script dir>/ConfigFiles`, which is auto-created at startup.
+
+- **Theming.** `_apply_theme()` (called before `_build_ui`) sets the `clam` ttk theme and a
+  light palette via module-level `COL_*` constants and named `ttk.Style`s. Blue (`COL_ACCENT`)
+  is the primary accent (banner, Open, Apply Matrix Size, headers); green (`COL_SUCCESS`) marks
+  "go" actions (`Success.TButton` for Send All, `Send.TButton` for per-row Send) and tints the
+  status bar; red (`COL_DANGER`) is Stop. Other styles: `Header.TLabel`, `Packet.TLabel`,
+  `Crc.TEntry`, `Resp.TEntry`, `Status.TLabel`, banner styles. The Response field swaps between
+  `Resp.TEntry` (light blue, reply received) and `RespErr.TEntry` (light red, `(no response)`)
+  in `_set_response()`. Styles are defined once here; `build_matrix` only references them by name. The UI is laid out as `ttk.LabelFrame` cards
+  (Connection / Matrix & Config / Send) under the header banner. To restyle, edit the palette
+  constants or `_apply_theme`, not the per-widget construction.
+
+## Maintenance
+
+Keep this file in sync with the code: whenever you change behavior, structure, defaults, the
+theme, or add/rename a feature in `serial_simulator.py`, update the relevant section here in the
+same change so future sessions stay accurate.
