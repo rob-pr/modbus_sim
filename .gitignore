@@ -11,3 +11,8 @@ __pycache__/
 
 # Saved configs (user data)
 ConfigFiles/*.json
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec

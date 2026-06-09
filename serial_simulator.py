@@ -28,8 +28,16 @@ import os
 import sys
 
 
-# default directory for save/load dialogs: <script dir>/ConfigFiles
-CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ConfigFiles")
+# Base directory for the app: the folder containing app.exe when frozen by
+# PyInstaller (sys._MEIPASS is a temp extraction dir, so we use sys.executable),
+# otherwise the directory of this script.
+if getattr(sys, "frozen", False):
+    APP_DIR = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# default directory for save/load dialogs: <app dir>/ConfigFiles
+CONFIG_DIR = os.path.join(APP_DIR, "ConfigFiles")
 
 # ---- light theme palette (blue accent) ----
 COL_BG = "#eef1f5"        # window background

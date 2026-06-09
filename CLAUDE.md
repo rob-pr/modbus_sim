@@ -11,8 +11,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Run the app
 .\.venv\Scripts\python.exe serial_simulator.py
 
-# Syntax check (no test suite, linter, or build step exists)
+# Syntax check (no test suite or linter exists)
 .\.venv\Scripts\python.exe -c "import ast; ast.parse(open('serial_simulator.py').read())"
+
+# Build a standalone double-clickable exe (output: dist\app.exe). Kill any running
+# app.exe first, or PyInstaller can't overwrite the locked file.
+.\.venv\Scripts\python.exe -m PyInstaller --onefile --windowed --name app --noconfirm serial_simulator.py
 ```
 
 The app needs a desktop session (Tkinter) and, to actually send, a serial port; it launches
@@ -61,7 +65,11 @@ Concepts that span the code:
 
 - **Save/Load config.** `save_config()`/`load_config()` persist serial settings, matrix size,
   byte data, and notes as JSON (CRC excluded — recomputed on load). Dialogs default to
-  `CONFIG_DIR` = `<script dir>/ConfigFiles`, which is auto-created at startup.
+  `CONFIG_DIR` = `<APP_DIR>/ConfigFiles`, auto-created at startup. `APP_DIR` is
+  frozen-aware: the folder containing `app.exe` when running as a PyInstaller exe
+  (via `sys.executable`, since `__file__`/`sys._MEIPASS` points at a temp extraction
+  dir that's deleted on exit), else this script's directory. Keep `app.exe` and its
+  `ConfigFiles` folder together so saved configs are always found.
 
 - **Theming.** `_apply_theme()` (called before `_build_ui`) sets the `clam` ttk theme and a
   light palette via module-level `COL_*` constants and named `ttk.Style`s. Blue (`COL_ACCENT`)
