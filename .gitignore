@@ -1,0 +1,13 @@
+# Virtual environment
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Local Claude Code config
+.claude/
+
+# Saved configs (user data)
+ConfigFiles/*.json
