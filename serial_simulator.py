@@ -9,6 +9,8 @@ Features:
 - Open/Close selected port
 - Configure baudrate, parity, stopbits, bytesize
 - Configurable matrix: columns = bytes per packet, rows = number of packets
+- Per-packet "On" checkbox (checked by default): Send All Checked sends only ticked packets,
+  while a row's own Send button always sends that row regardless
 - Send button: snapshots matrix and sends packets once or continuously
 - Continuous send with configurable interval between packets (ms)
 - If continuous sending is active, editing the matrix won't change the active send; click Send again to restart with new data
@@ -28,6 +30,10 @@ import os
 import sys
 
 
+APP_NAME = "Modbus Simulator"
+APP_VERSION = "v1.0.1"
+
+
 # Base directory for the app: the folder containing app.exe when frozen by
 # PyInstaller (sys._MEIPASS is a temp extraction dir, so we use sys.executable),
 # otherwise the directory of this script.
@@ -39,21 +45,28 @@ else:
 # default directory for save/load dialogs: <app dir>/ConfigFiles
 CONFIG_DIR = os.path.join(APP_DIR, "ConfigFiles")
 
-# ---- light theme palette (blue accent) ----
-COL_BG = "#eef1f5"        # window background
-COL_CARD = "#ffffff"      # card / panel background
-COL_TEXT = "#1f2937"      # primary text
-COL_MUTED = "#6b7280"     # secondary text
-COL_BORDER = "#d1d5db"    # borders
-COL_ACCENT = "#2563eb"    # primary accent (blue)
-COL_ACCENT_HOVER = "#1d4ed8"
-COL_DANGER = "#dc2626"
-COL_DANGER_HOVER = "#b91c1c"
-COL_SUCCESS = "#16a34a"   # green (send actions)
-COL_SUCCESS_HOVER = "#15803d"
-COL_CRC = "#eceff3"       # CRC cell field (greyed)
-COL_RESP = "#eef4ff"      # response cell field (light blue)
-COL_RESP_ERR = "#fde2e2"  # response cell field when no reply (light red)
+# ---- mid-grey theme palette (muted blue accent) ----
+COL_BG = "#c9ccd1"        # window background
+COL_CARD = "#dfe2e6"      # card / panel background
+COL_TEXT = "#17202b"      # primary text
+COL_MUTED = "#5b6169"     # secondary text
+COL_BORDER = "#a9aeb5"    # borders
+COL_ACCENT = "#2b5299"    # primary accent (muted blue)
+COL_ACCENT_HOVER = "#1f3f78"
+COL_ACCENT_SOFT = "#c3cfe0"  # light text/detail on an accent background
+COL_DANGER = "#b52222"
+COL_DANGER_HOVER = "#8f1b1b"
+COL_SUCCESS = "#2f7d4f"   # green (send actions)
+COL_SUCCESS_HOVER = "#256640"
+COL_BTN = "#cbcfd4"       # neutral button fill
+COL_BTN_HOVER = "#b6bbc2"
+COL_DISABLED = "#b9bec5"  # text on a disabled coloured button
+COL_CRC = "#c4c8cd"       # CRC cell field (greyed)
+COL_RESP = "#ccd6e6"      # response cell field (grey-blue)
+COL_RESP_ERR = "#e2c4c4"  # response cell field when no reply (grey-red)
+COL_RESP_ERR_FG = "#7f1d1d"
+COL_STATUS_BG = "#c6d3c6"  # status bar (grey-green)
+COL_STATUS_FG = "#2c4a33"
 
 try:
     import serial
@@ -82,7 +95,7 @@ def compute_crc16_modbus(data: bytes) -> int:
 class SerialSimulator(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Modbus Simulator")
+        self.title(f"{APP_NAME} {APP_VERSION}")
         self.geometry("820x600")
         self.minsize(720, 520)
 
@@ -97,17 +110,21 @@ class SerialSimulator(tk.Tk):
         self.entry_widgets = []     # list of lists for matrix
         self.text_widgets = []      # list for custom text entries (Reg Name notes)
         self.response_widgets = []  # list of read-only entries showing each packet's response
+        self.enabled_vars = []      # list of BooleanVar: is this packet included in Send All Checked
+        self.select_all_var = tk.BooleanVar(value=True)  # header tick: toggles every row at once
+        self._suspend_sync = False  # guard while _toggle_all_rows rewrites every row var
 
         self._build_ui()
 
     def _apply_theme(self):
-        """Apply a modern light theme (blue accent) on the clam base theme."""
+        """Apply a mid-grey theme (muted blue accent) on the clam base theme."""
         self.configure(bg=COL_BG)
 
         # base + heading fonts (Segoe UI is the Windows 11 system font)
         self.base_font = tkfont.Font(family="Segoe UI", size=10)
         self.bold_font = tkfont.Font(family="Segoe UI", size=10, weight="bold")
         self.title_font = tkfont.Font(family="Segoe UI", size=15, weight="bold")
+        self.version_font = tkfont.Font(family="Segoe UI", size=9)
         self.option_add("*Font", self.base_font)
 
         style = ttk.Style(self)
@@ -153,33 +170,33 @@ class SerialSimulator(tk.Tk):
         style.configure("Resp.TEntry", fieldbackground=COL_RESP, foreground=COL_TEXT)
         style.map("Resp.TEntry", fieldbackground=[("readonly", COL_RESP)],
                   foreground=[("readonly", COL_TEXT)])
-        style.configure("RespErr.TEntry", fieldbackground=COL_RESP_ERR, foreground="#991b1b")
+        style.configure("RespErr.TEntry", fieldbackground=COL_RESP_ERR, foreground=COL_RESP_ERR_FG)
         style.map("RespErr.TEntry", fieldbackground=[("readonly", COL_RESP_ERR)],
-                  foreground=[("readonly", "#991b1b")])
+                  foreground=[("readonly", COL_RESP_ERR_FG)])
 
         # buttons
-        style.configure("TButton", background="#e5e7eb", foreground=COL_TEXT,
+        style.configure("TButton", background=COL_BTN, foreground=COL_TEXT,
                         bordercolor=COL_BORDER, focuscolor=COL_BG,
                         padding=(10, 5), relief="flat")
-        style.map("TButton", background=[("active", "#d1d5db")])
+        style.map("TButton", background=[("active", COL_BTN_HOVER)])
 
         style.configure("Accent.TButton", background=COL_ACCENT, foreground="#ffffff",
                         bordercolor=COL_ACCENT, padding=(12, 5), relief="flat")
         style.map("Accent.TButton",
                   background=[("pressed", COL_ACCENT_HOVER), ("active", COL_ACCENT_HOVER)],
-                  foreground=[("disabled", "#e5e7eb")])
+                  foreground=[("disabled", COL_DISABLED)])
 
         style.configure("Danger.TButton", background=COL_DANGER, foreground="#ffffff",
                         bordercolor=COL_DANGER, padding=(12, 5), relief="flat")
         style.map("Danger.TButton",
                   background=[("pressed", COL_DANGER_HOVER), ("active", COL_DANGER_HOVER)])
 
-        # green "go" buttons: Send All and per-row Send
+        # green "go" buttons: Send All Checked and per-row Send
         style.configure("Success.TButton", background=COL_SUCCESS, foreground="#ffffff",
                         bordercolor=COL_SUCCESS, padding=(12, 5), relief="flat")
         style.map("Success.TButton",
                   background=[("pressed", COL_SUCCESS_HOVER), ("active", COL_SUCCESS_HOVER)],
-                  foreground=[("disabled", "#e5e7eb")])
+                  foreground=[("disabled", COL_DISABLED)])
 
         style.configure("Send.TButton", background=COL_SUCCESS, foreground="#ffffff",
                         bordercolor=COL_SUCCESS, padding=(6, 2), relief="flat")
@@ -196,7 +213,9 @@ class SerialSimulator(tk.Tk):
         style.configure("Banner.TFrame", background=COL_ACCENT)
         style.configure("Banner.TLabel", background=COL_ACCENT, foreground="#ffffff",
                         font=self.title_font)
-        style.configure("Status.TLabel", background="#dcfce7", foreground="#166534",
+        style.configure("BannerVer.TLabel", background=COL_ACCENT, foreground=COL_ACCENT_SOFT,
+                        font=self.version_font)
+        style.configure("Status.TLabel", background=COL_STATUS_BG, foreground=COL_STATUS_FG,
                         padding=(8, 4))
 
         # scrollbar
@@ -207,8 +226,10 @@ class SerialSimulator(tk.Tk):
         # header banner
         banner = ttk.Frame(self, style="Banner.TFrame")
         banner.pack(fill=tk.X)
-        ttk.Label(banner, text="Modbus Simulator",
-                  style="Banner.TLabel").pack(side=tk.LEFT, padx=12, pady=8)
+        ttk.Label(banner, text=APP_NAME,
+                  style="Banner.TLabel").pack(side=tk.LEFT, padx=(12, 6), pady=8)
+        ttk.Label(banner, text=APP_VERSION,
+                  style="BannerVer.TLabel").pack(side=tk.LEFT, padx=(0, 12), pady=(14, 8))
 
         # Connection card: port selection and serial config
         top = ttk.LabelFrame(self, text="Connection", style="Card.TLabelframe", padding=10)
@@ -285,7 +306,7 @@ class SerialSimulator(tk.Tk):
         bot.pack(fill=tk.X, padx=10, pady=4)
 
         # interval_var now represents group delay (ms) after whole group of packets is sent
-        # inter-packet delay is fixed at 3000 ms (Modbus-like pacing)
+        # inter-packet delay within a group is fixed at 100 ms (see _send_worker)
         self.interval_var = tk.IntVar(value=3000)  # ms (group delay)
         ttk.Label(bot, text="Group delay (ms) after all packets sent:", style="Card.TLabel").grid(row=0, column=0, sticky=tk.W, padx=4, pady=3)
         self.interval_entry = ttk.Entry(bot, textvariable=self.interval_var, width=8)
@@ -295,7 +316,8 @@ class SerialSimulator(tk.Tk):
         self.continuous_check = ttk.Checkbutton(bot, text="Continuous", variable=self.continuous_var)
         self.continuous_check.grid(row=0, column=2, padx=12, pady=3)
 
-        self.send_btn = ttk.Button(bot, text="Send All", style="Success.TButton", command=self.on_send)
+        self.send_btn = ttk.Button(bot, text="Send All Checked", style="Success.TButton",
+                                   command=self.on_send)
         self.send_btn.grid(row=0, column=3, padx=8, pady=3)
 
         self.stop_btn = ttk.Button(bot, text="Stop", style="Danger.TButton", command=self.stop_sending)
@@ -359,6 +381,7 @@ class SerialSimulator(tk.Tk):
             ncols = len(widget_row)
             old_data.append([widget_row[c].get() for c in range(max(0, ncols - 2))])
         old_notes = [w.get() for w in self.text_widgets]
+        old_enabled = [v.get() for v in self.enabled_vars]
 
         # clear existing — destroy ALL children (headers, packet labels, cells, notes)
         # so stale labels don't linger when the matrix shrinks or overlap when it grows.
@@ -367,32 +390,56 @@ class SerialSimulator(tk.Tk):
         self.entry_widgets.clear()
         self.text_widgets.clear()
         self.response_widgets.clear()
+        self.enabled_vars.clear()
 
         # ensure at least two bytes per packet (last two reserved for CRC)
         cols = max(2, int(self.cols_var.get()))
         rows = max(1, int(self.rows_var.get()))
 
-        # header
+        # header. column 0 is the per-row enable tick, so byte/name/response
+        # columns all sit one to the right of their old positions.
+        # the "On" header doubles as the select-all tick: it checks/unchecks every
+        # row, and _sync_select_all keeps it in step when rows are toggled individually.
+        self.select_all_chk = tk.Checkbutton(
+            self.matrix_frame, text="On", variable=self.select_all_var,
+            command=self._toggle_all_rows, bg=COL_CARD, activebackground=COL_CARD,
+            selectcolor=COL_CARD, fg=COL_ACCENT, activeforeground=COL_ACCENT,
+            font=self.bold_font, highlightthickness=0, bd=0, padx=0, pady=0,
+            takefocus=0)
+        self.select_all_chk.grid(row=0, column=0, padx=(6, 2), pady=4)
         for c in range(cols):
             lbl = ttk.Label(self.matrix_frame, text=f"Byte{c}", style="Header.TLabel")
-            lbl.grid(row=0, column=c+1, padx=2, pady=4)
+            lbl.grid(row=0, column=c+2, padx=2, pady=4)
         # header for custom text column (notes only, not sent)
         lbl = ttk.Label(self.matrix_frame, text="Reg Name", style="Header.TLabel")
-        lbl.grid(row=0, column=cols+1, padx=2, pady=4)
+        lbl.grid(row=0, column=cols+2, padx=2, pady=4)
         # header for the response column
         lbl = ttk.Label(self.matrix_frame, text="Response", style="Header.TLabel")
-        lbl.grid(row=0, column=cols+2, padx=2, pady=4)
+        lbl.grid(row=0, column=cols+3, padx=2, pady=4)
         # header for the per-row send button column
         lbl = ttk.Label(self.matrix_frame, text="", style="Header.TLabel")
-        lbl.grid(row=0, column=cols+3, padx=2, pady=4)
+        lbl.grid(row=0, column=cols+4, padx=2, pady=4)
 
         for r in range(rows):
+            # per-row enable tick: new rows start checked, existing rows keep
+            # their state across a resize. Only ticked rows go out on Send All Checked;
+            # the row's own Send button ignores this entirely.
+            enabled_var = tk.BooleanVar(value=old_enabled[r] if r < len(old_enabled) else True)
+            # classic tk.Checkbutton, not ttk: the clam theme draws an X in a ticked
+            # ttk box, which reads as "excluded" — the native indicator gives a checkmark.
+            enabled_var.trace_add('write', lambda *_: self._sync_select_all())
+            chk = tk.Checkbutton(self.matrix_frame, variable=enabled_var,
+                                 bg=COL_CARD, activebackground=COL_CARD,
+                                 selectcolor=COL_CARD, highlightthickness=0,
+                                 bd=0, padx=0, pady=0, takefocus=0)
+            chk.grid(row=r+1, column=0, padx=(6, 2), pady=1)
+            self.enabled_vars.append(enabled_var)
             lbl = ttk.Label(self.matrix_frame, text=f"Packet{r}", style="Packet.TLabel")
-            lbl.grid(row=r+1, column=0, padx=6, pady=2)
+            lbl.grid(row=r+1, column=1, padx=6, pady=2)
             row_widgets = []
             for c in range(cols):
                 e = ttk.Entry(self.matrix_frame, width=6, justify=tk.CENTER)
-                e.grid(row=r+1, column=c+1, padx=2, pady=1)
+                e.grid(row=r+1, column=c+2, padx=2, pady=1)
                 # default with zeros
                 if c >= cols - 2:
                     # last two columns are CRC bytes: readonly and auto-updated
@@ -416,12 +463,12 @@ class SerialSimulator(tk.Tk):
             self.entry_widgets.append(row_widgets)
             # add note field for this row (display only, not sent)
             note_entry = ttk.Entry(self.matrix_frame, width=15)
-            note_entry.grid(row=r+1, column=cols+1, padx=2, pady=1)
+            note_entry.grid(row=r+1, column=cols+2, padx=2, pady=1)
             note_entry.insert(0, old_notes[r] if r < len(old_notes) else "")
             self.text_widgets.append(note_entry)
             # response field for this row (read-only, filled after a send)
             resp_entry = ttk.Entry(self.matrix_frame, width=24, style="Resp.TEntry")
-            resp_entry.grid(row=r+1, column=cols+2, padx=2, pady=1)
+            resp_entry.grid(row=r+1, column=cols+3, padx=2, pady=1)
             try:
                 resp_entry.state(['readonly'])
             except Exception:
@@ -431,10 +478,11 @@ class SerialSimulator(tk.Tk):
             row_send_btn = ttk.Button(self.matrix_frame, text="Send", width=6,
                                       style="Send.TButton",
                                       command=lambda rr=r: self.send_single(rr))
-            row_send_btn.grid(row=r+1, column=cols+3, padx=4, pady=1)
+            row_send_btn.grid(row=r+1, column=cols+4, padx=4, pady=1)
 
         # compute CRCs for all rows initially
         self._update_all_crcs()
+        self._sync_select_all()
 
     def _collect_data_cells(self):
         """Return matrix data cells (raw strings, CRC columns excluded) and notes."""
@@ -466,6 +514,7 @@ class SerialSimulator(tk.Tk):
             'continuous': bool(self.continuous_var.get()),
             'data': data,    # CRC columns excluded; recomputed on load
             'notes': notes,
+            'enabled': [bool(v.get()) for v in self.enabled_vars],
         }
         try:
             with open(path, 'w', encoding='utf-8') as f:
@@ -519,6 +568,12 @@ class SerialSimulator(tk.Tk):
             if i < len(notes):
                 w.delete(0, tk.END)
                 w.insert(0, notes[i])
+        # restore the per-row "On" ticks; configs saved before this existed have no
+        # 'enabled' key, so those rows default to checked.
+        enabled = config.get('enabled')
+        for i, v in enumerate(self.enabled_vars):
+            v.set(bool(enabled[i]) if enabled is not None and i < len(enabled) else True)
+        self._sync_select_all()
 
         self._update_all_crcs()
         self.status_label.config(text=f"Status: loaded config from {path}")
@@ -566,10 +621,46 @@ class SerialSimulator(tk.Tk):
         self._update_row_crc(row_index)
         return bytes(packet)
 
+    def _toggle_all_rows(self):
+        """Header "On" tick: check or uncheck every packet at once."""
+        value = bool(self.select_all_var.get())
+        self._suspend_sync = True   # don't let per-row traces flicker the header mid-loop
+        try:
+            for v in self.enabled_vars:
+                v.set(value)
+        finally:
+            self._suspend_sync = False
+        self._sync_select_all()
+
+    def _sync_select_all(self):
+        """Keep the header tick in step with the individual row ticks.
+
+        Driven by a `write` trace on every row var, so it stays correct whether a row
+        was clicked, restored from a config, or set in code.
+        """
+        if self._suspend_sync:
+            return
+        self.select_all_var.set(bool(self.enabled_vars)
+                                and all(v.get() for v in self.enabled_vars))
+
+    def _row_enabled(self, row_index: int) -> bool:
+        """True if this row's "On" tick is set (a missing var counts as enabled)."""
+        try:
+            return bool(self.enabled_vars[row_index].get())
+        except IndexError:
+            return True
+
     def read_matrix_snapshot(self):
-        """Read matrix into a list of (row_index, packet) tuples (non-empty rows only)."""
+        """Read matrix into a list of (row_index, packet) tuples.
+
+        Includes only rows that are ticked "On" and non-empty — this is what
+        Send All Checked sends. Per-row Send bypasses this and goes straight to
+        _read_single_packet, so it always sends regardless of the tick.
+        """
         packets = []
         for r in range(len(self.entry_widgets)):
+            if not self._row_enabled(r):
+                continue
             p = self._read_single_packet(r)
             if p is not None:
                 packets.append((r, p))
@@ -744,7 +835,12 @@ class SerialSimulator(tk.Tk):
             return
 
         if not packets:
-            messagebox.showwarning("Nothing to send", "All packets are empty (data bytes all zero). Nothing was sent.")
+            if not any(self._row_enabled(r) for r in range(len(self.entry_widgets))):
+                msg = ('No packets are checked. Tick the "On" box on at least one packet, '
+                       "or use a row's own Send button.")
+            else:
+                msg = "All checked packets are empty (data bytes all zero). Nothing was sent."
+            messagebox.showwarning("Nothing to send", msg)
             return
 
         if self.sender_thread and self.sender_thread.is_alive():
