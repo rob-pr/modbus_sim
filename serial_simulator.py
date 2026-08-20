@@ -32,7 +32,7 @@ import sys
 
 
 APP_NAME = "Modbus Simulator"
-APP_VERSION = "v1.0.1"
+APP_VERSION = "v1.0.2"
 
 
 # Base directory for the app: the folder containing app.exe when frozen by

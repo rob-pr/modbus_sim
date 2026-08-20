@@ -56,17 +56,41 @@ A packet whose data bytes are **all zero** is treated as empty and skipped, so y
 matrix generously and only fill in the rows you need. (The CRC columns are excluded from that
 check, since a CRC over zeros isn't itself zero.)
 
-### Sending only some packets
+### Choosing which packets to send
 
-Every row has an **"On"** tick, and new rows start ticked:
+Every packet row has a checkbox in the **"On"** column on the left. The rule is simple:
 
-- **`Send All Checked`** sends only the ticked rows.
-- The **header "On" tick** toggles every row at once, and shows as ticked only when all rows are.
-- A row's own **`Send`** button ignores the tick entirely.
+> **`Send All Checked` sends the ticked packets and skips the unticked ones.**
 
-So to continuously hammer one register out of a full matrix: untick the header to clear
-everything, tick the single packet you want, then `Send All Checked` with **Continuous** on. The
-rest of the matrix stays one click away via each row's own `Send`.
+Nothing is lost by unticking a packet — it stays in the matrix with its bytes intact, and you
+can still fire it by hand any time with its own `Send` button.
+
+| Control | What it does |
+|---|---|
+| Row checkbox | Include (ticked) or skip (unticked) that packet in `Send All Checked` |
+| **"On"** checkbox in the header | Ticks or unticks **every** packet at once |
+| Row's **`Send`** button | Sends that one packet immediately, **ignoring** its checkbox |
+| **`Send All Checked`** | Sends every ticked packet, once — or repeatedly if **Continuous** is on |
+
+New packets are ticked automatically, so with a fresh matrix `Send All Checked` sends everything.
+
+#### Example: loop just one packet out of a full matrix
+
+You have 20 packets set up, but you want to send only packet 7 over and over:
+
+1. Clear every tick with the **"On"** checkbox in the header. (It mirrors the rows, so when
+   they're all ticked one click empties them; otherwise click once to tick all, again to clear.)
+2. Tick the checkbox on **Packet7** only.
+3. Turn on **Continuous** and click **`Send All Checked`**.
+
+Packet7 now repeats on its own. The other 19 packets aren't sending, but they're still there —
+click any row's `Send` button to send that one manually whenever you need it, even while the loop
+is running.
+
+To bring a packet back into the loop, just tick it: it joins on the next pass, no restart needed.
+Untick one and it drops out the same way.
+
+Your ticks are saved with `Save Config`, so a setup comes back exactly as you left it.
 
 ### Timing
 
