@@ -13,7 +13,8 @@ Features:
   while a row's own Send button always sends that row regardless
 - Send button: snapshots matrix and sends packets once or continuously
 - Continuous send with configurable interval between packets (ms)
-- If continuous sending is active, editing the matrix won't change the active send; click Send again to restart with new data
+- Continuous sending re-reads the matrix before every pass, so edits to the byte cells (and to
+  the "On" ticks) take effect on the next pass without restarting the send
 
 Depends on: pyserial
 
@@ -867,14 +868,14 @@ class SerialSimulator(tk.Tk):
         # If serial not open, error
         if not self.serial_port or not getattr(self.serial_port, 'is_open', False):
             self._safe_messagebox("Port not open", "Please open a serial port before sending")
-            self.status_label.config(text="Status: idle")
+            self._safe_status("Status: idle")
             return
 
         try:
             while True:
                 for r, p in packets:
                     if self.stop_event.is_set():
-                        self.status_label.config(text="Status: idle")
+                        self._safe_status("Status: idle")
                         return
                     # write as bytes, then capture the slave's reply for this row
                     try:
@@ -889,7 +890,7 @@ class SerialSimulator(tk.Tk):
                         self.after(0, lambda rr=r, t=text: self._set_response(rr, t))
                     except Exception as e:
                         self._safe_messagebox("Write error", str(e))
-                        self.status_label.config(text="Status: idle")
+                        self._safe_status("Status: idle")
                         return
                     # fixed brief sleep between packets (100 ms)
                     # keep responsive to stop_event by sleeping in smaller chunks
@@ -901,7 +902,7 @@ class SerialSimulator(tk.Tk):
                         remaining -= t
                 if not continuous:
                     # finished
-                    self.status_label.config(text="Status: idle")
+                    self._safe_status("Status: idle")
                     return
                 # after sending the whole group, wait group-delay (user-configurable)
                 remaining = interval_s
@@ -910,8 +911,50 @@ class SerialSimulator(tk.Tk):
                     t = min(step, remaining)
                     time.sleep(t)
                     remaining -= t
+                if self.stop_event.is_set():
+                    self._safe_status("Status: idle")
+                    return
+                # Re-read the matrix so the next pass sends what the cells say *now*:
+                # edits (and tick changes) made mid-run take effect on the next pass
+                # instead of being frozen at the values captured when Send was pressed.
+                # A failed read means the matrix is momentarily invalid — mid-keystroke,
+                # typically — so keep the last good packets rather than erroring out.
+                fresh, err = self._snapshot_from_ui()
+                if fresh is not None and err is None:
+                    packets = fresh
+                    self._safe_status("Status: sending (continuous)" if packets else
+                                      "Status: sending (continuous) - nothing checked")
         finally:
             pass
+
+    def _safe_status(self, text):
+        """Set the status bar from any thread."""
+        self.after(0, lambda: self.status_label.config(text=text))
+
+    def _snapshot_from_ui(self, timeout=2.0):
+        """Re-read the matrix from the sender thread.
+
+        The matrix is Tk widgets and _read_single_packet also rewrites the CRC cells,
+        so the read has to happen on the main thread — this marshals it there and waits.
+        Returns (packets, error): `error` is set when the matrix currently holds invalid
+        input (a half-typed cell, say), and both are None if the main thread didn't
+        answer in time. Callers keep their previous packet set in either case.
+        """
+        box = {}
+        done = threading.Event()
+
+        def grab():
+            try:
+                box['packets'] = self.read_matrix_snapshot()
+            except Exception as exc:
+                box['error'] = exc
+            finally:
+                done.set()
+
+        self.after(0, grab)
+        if not done.wait(timeout):
+            return None, None
+        return box.get('packets'), box.get('error')
 
     def _safe_messagebox(self, title, msg):
         # Show messagebox safely from thread using after

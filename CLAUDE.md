@@ -70,10 +70,18 @@ Concepts that span the code:
 
 - **Sending.** Per-row **Send** → `send_single()` (one write, bypasses continuous mode and the
   "On" tick). Bottom **Send All Checked** → `on_send()` snapshots the ticked rows, then runs a
-  daemon `_send_worker` thread; matrix edits and tick changes during an active continuous send
-  don't affect it (press Send All Checked again to restart with a fresh snapshot). Its
-  "Nothing to send" warning distinguishes *no rows ticked* from *ticked rows all empty*. Both
-  flush input, write, then read the reply via `_read_response()`.
+  daemon `_send_worker` thread. Its "Nothing to send" warning distinguishes *no rows ticked*
+  from *ticked rows all empty*. Both flush input, write, then read the reply via
+  `_read_response()`.
+
+- **Continuous sends stay live.** After each group delay `_send_worker` calls
+  `_snapshot_from_ui()` and replaces its packet list, so byte edits and tick changes take
+  effect on the **next pass** — no restart needed. Two things make that safe: the re-read is
+  marshalled onto the main thread (the matrix is Tk widgets, and `_read_single_packet` also
+  rewrites CRC cells), and a failed read is *ignored* rather than fatal — a half-typed cell
+  raises `ValueError`, so the worker keeps its last good packet list instead of dying. A
+  re-read that returns an empty list (everything unticked) idles the loop until rows come
+  back. The group delay itself is still fixed when Send is pressed.
 
 - **Response reads are adaptive.** The port is opened with `timeout=0.2`. `_read_response()`
   waits for the first byte then drains until ~30 ms idle — it returns as soon as the frame is

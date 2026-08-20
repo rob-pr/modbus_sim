@@ -77,9 +77,15 @@ Replies are read adaptively rather than by waiting for a fixed byte count: the a
 first byte, then drains until the line has been idle ~30 ms. Sending is therefore paced by how
 fast the slave actually answers.
 
-`Send All Checked` takes a **snapshot** of the matrix. Edits and tick changes made during an
-active continuous send do not affect the run in progress — press `Send All Checked` again to
-restart from the current state. `Stop` ends it.
+**Continuous sends stay live.** Before each pass the matrix is re-read, so editing a byte cell
+mid-run means the next pass sends the new value — no need to stop and restart. Tick changes are
+picked up the same way, so you can untick a row and it drops out of the loop (untick everything
+and the loop simply idles until you tick something again). While a cell is momentarily invalid —
+mid-keystroke, or blank while you retype it — the loop keeps sending the last valid value rather
+than erroring. `Stop` ends the run.
+
+The *Group delay* is read once when you press `Send All Checked`; changing it mid-run needs a
+restart to take effect.
 
 ### Save/Load config
 
