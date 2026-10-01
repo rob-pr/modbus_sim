@@ -32,7 +32,7 @@ import sys
 
 
 APP_NAME = "Modbus Simulator"
-APP_VERSION = "v1.0.2"
+APP_VERSION = "v1.0.3"
 
 
 # Base directory for the app: the folder containing app.exe when frozen by
@@ -46,28 +46,30 @@ else:
 # default directory for save/load dialogs: <app dir>/ConfigFiles
 CONFIG_DIR = os.path.join(APP_DIR, "ConfigFiles")
 
-# ---- mid-grey theme palette (muted blue accent) ----
-COL_BG = "#c9ccd1"        # window background
-COL_CARD = "#dfe2e6"      # card / panel background
-COL_TEXT = "#17202b"      # primary text
-COL_MUTED = "#5b6169"     # secondary text
-COL_BORDER = "#a9aeb5"    # borders
-COL_ACCENT = "#2b5299"    # primary accent (muted blue)
-COL_ACCENT_HOVER = "#1f3f78"
-COL_ACCENT_SOFT = "#c3cfe0"  # light text/detail on an accent background
-COL_DANGER = "#b52222"
-COL_DANGER_HOVER = "#8f1b1b"
-COL_SUCCESS = "#2f7d4f"   # green (send actions)
-COL_SUCCESS_HOVER = "#256640"
-COL_BTN = "#cbcfd4"       # neutral button fill
-COL_BTN_HOVER = "#b6bbc2"
-COL_DISABLED = "#b9bec5"  # text on a disabled coloured button
-COL_CRC = "#c4c8cd"       # CRC cell field (greyed)
-COL_RESP = "#ccd6e6"      # response cell field (grey-blue)
-COL_RESP_ERR = "#e2c4c4"  # response cell field when no reply (grey-red)
-COL_RESP_ERR_FG = "#7f1d1d"
-COL_STATUS_BG = "#c6d3c6"  # status bar (grey-green)
-COL_STATUS_FG = "#2c4a33"
+# ---- dark theme palette (muted blue accent) ----
+COL_BG = "#1e2126"        # window background (darkest)
+COL_CARD = "#272b31"      # card / panel background
+COL_FIELD = "#31363d"     # input field background
+COL_TEXT = "#e3e6ea"      # primary text
+COL_MUTED = "#98a0aa"     # secondary text
+COL_BORDER = "#41474f"    # borders
+COL_ACCENT = "#3d6bb3"    # primary accent fill (muted blue)
+COL_ACCENT_HOVER = "#4c7cc6"
+COL_ACCENT_TEXT = "#86aae3"  # accent-coloured text on dark backgrounds (headers)
+COL_ACCENT_SOFT = "#c9d7ee"  # light text/detail on an accent background
+COL_DANGER = "#b23a3a"
+COL_DANGER_HOVER = "#c64a4a"
+COL_SUCCESS = "#2e8150"   # green (send actions)
+COL_SUCCESS_HOVER = "#379760"
+COL_BTN = "#373c44"       # neutral button fill
+COL_BTN_HOVER = "#444a53"
+COL_DISABLED = "#8b929b"  # text on a disabled coloured button
+COL_CRC = "#2a2e34"       # CRC cell field (greyed)
+COL_RESP = "#263548"      # response cell field (dark blue-grey)
+COL_RESP_ERR = "#4a2a2d"  # response cell field when no reply (dark red)
+COL_RESP_ERR_FG = "#f2a9a9"
+COL_STATUS_BG = "#1f3027"  # status bar (dark green)
+COL_STATUS_FG = "#a6d5b4"
 
 try:
     import serial
@@ -118,8 +120,9 @@ class SerialSimulator(tk.Tk):
         self._build_ui()
 
     def _apply_theme(self):
-        """Apply a mid-grey theme (muted blue accent) on the clam base theme."""
+        """Apply a dark theme (muted blue accent) on the clam base theme."""
         self.configure(bg=COL_BG)
+        self._dark_title_bar()
 
         # base + heading fonts (Segoe UI is the Windows 11 system font)
         self.base_font = tkfont.Font(family="Segoe UI", size=10)
@@ -134,32 +137,47 @@ class SerialSimulator(tk.Tk):
         except tk.TclError:
             pass
 
-        # generic widgets
-        style.configure(".", background=COL_BG, foreground=COL_TEXT, font=self.base_font)
+        # generic widgets. clam draws bevels with light/dark colours that default to
+        # near-white, so they're pinned to the surface colours to avoid bright edges.
+        style.configure(".", background=COL_BG, foreground=COL_TEXT, font=self.base_font,
+                        bordercolor=COL_BORDER, lightcolor=COL_CARD, darkcolor=COL_CARD,
+                        troughcolor=COL_BG, selectbackground=COL_ACCENT,
+                        selectforeground="#ffffff", insertcolor=COL_TEXT,
+                        focuscolor=COL_ACCENT)
+        style.map(".", foreground=[("disabled", COL_MUTED)])
         style.configure("TFrame", background=COL_BG)
         style.configure("Card.TFrame", background=COL_CARD)
         style.configure("TLabel", background=COL_BG, foreground=COL_TEXT)
         style.configure("Card.TLabel", background=COL_CARD, foreground=COL_TEXT)
-        style.configure("TCheckbutton", background=COL_CARD, foreground=COL_TEXT)
+        style.configure("TCheckbutton", background=COL_CARD, foreground=COL_TEXT,
+                        indicatorbackground=COL_FIELD, indicatorforeground=COL_TEXT,
+                        upperbordercolor=COL_BORDER, lowerbordercolor=COL_BORDER)
         style.map("TCheckbutton",
                   background=[("active", COL_CARD)],
-                  indicatorcolor=[("selected", COL_ACCENT)])
+                  indicatorbackground=[("selected", COL_ACCENT), ("pressed", COL_BTN_HOVER)],
+                  indicatorforeground=[("selected", "#ffffff")])
 
         # cards (LabelFrame)
         style.configure("Card.TLabelframe", background=COL_CARD,
                         bordercolor=COL_BORDER, relief="solid", borderwidth=1)
         style.configure("Card.TLabelframe.Label", background=COL_CARD,
-                        foreground=COL_ACCENT, font=self.bold_font)
+                        foreground=COL_ACCENT_TEXT, font=self.bold_font)
 
         # inputs
         for ent in ("TEntry", "TCombobox", "TSpinbox"):
-            style.configure(ent, fieldbackground=COL_CARD, background=COL_CARD,
+            style.configure(ent, fieldbackground=COL_FIELD, background=COL_BTN,
                             foreground=COL_TEXT, bordercolor=COL_BORDER,
-                            arrowcolor=COL_TEXT)
-        style.map("TCombobox", fieldbackground=[("readonly", COL_CARD)],
-                  foreground=[("readonly", COL_TEXT)])
+                            lightcolor=COL_FIELD, darkcolor=COL_FIELD,
+                            arrowcolor=COL_TEXT, insertcolor=COL_TEXT)
+            style.map(ent, bordercolor=[("focus", COL_ACCENT)],
+                      lightcolor=[("focus", COL_ACCENT)],
+                      background=[("active", COL_BTN_HOVER)])
+        style.map("TCombobox", fieldbackground=[("readonly", COL_FIELD)],
+                  foreground=[("readonly", COL_TEXT)],
+                  selectbackground=[("readonly", COL_FIELD)],
+                  selectforeground=[("readonly", COL_TEXT)])
         # combobox dropdown list colors
-        self.option_add("*TCombobox*Listbox.background", COL_CARD)
+        self.option_add("*TCombobox*Listbox.background", COL_FIELD)
         self.option_add("*TCombobox*Listbox.foreground", COL_TEXT)
         self.option_add("*TCombobox*Listbox.selectBackground", COL_ACCENT)
         self.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
@@ -175,37 +193,25 @@ class SerialSimulator(tk.Tk):
         style.map("RespErr.TEntry", fieldbackground=[("readonly", COL_RESP_ERR)],
                   foreground=[("readonly", COL_RESP_ERR_FG)])
 
-        # buttons
-        style.configure("TButton", background=COL_BTN, foreground=COL_TEXT,
-                        bordercolor=COL_BORDER, focuscolor=COL_BG,
-                        padding=(10, 5), relief="flat")
-        style.map("TButton", background=[("active", COL_BTN_HOVER)])
-
-        style.configure("Accent.TButton", background=COL_ACCENT, foreground="#ffffff",
-                        bordercolor=COL_ACCENT, padding=(12, 5), relief="flat")
-        style.map("Accent.TButton",
-                  background=[("pressed", COL_ACCENT_HOVER), ("active", COL_ACCENT_HOVER)],
-                  foreground=[("disabled", COL_DISABLED)])
-
-        style.configure("Danger.TButton", background=COL_DANGER, foreground="#ffffff",
-                        bordercolor=COL_DANGER, padding=(12, 5), relief="flat")
-        style.map("Danger.TButton",
-                  background=[("pressed", COL_DANGER_HOVER), ("active", COL_DANGER_HOVER)])
-
-        # green "go" buttons: Send All Checked and per-row Send
-        style.configure("Success.TButton", background=COL_SUCCESS, foreground="#ffffff",
-                        bordercolor=COL_SUCCESS, padding=(12, 5), relief="flat")
-        style.map("Success.TButton",
-                  background=[("pressed", COL_SUCCESS_HOVER), ("active", COL_SUCCESS_HOVER)],
-                  foreground=[("disabled", COL_DISABLED)])
-
-        style.configure("Send.TButton", background=COL_SUCCESS, foreground="#ffffff",
-                        bordercolor=COL_SUCCESS, padding=(6, 2), relief="flat")
-        style.map("Send.TButton",
-                  background=[("pressed", COL_SUCCESS_HOVER), ("active", COL_SUCCESS_HOVER)])
+        # buttons: (style, fill, hover fill, text, padding)
+        buttons = (
+            ("TButton", COL_BTN, COL_BTN_HOVER, COL_TEXT, (10, 5)),
+            ("Accent.TButton", COL_ACCENT, COL_ACCENT_HOVER, "#ffffff", (12, 5)),
+            ("Danger.TButton", COL_DANGER, COL_DANGER_HOVER, "#ffffff", (12, 5)),
+            # green "go" buttons: Send All Checked and per-row Send
+            ("Success.TButton", COL_SUCCESS, COL_SUCCESS_HOVER, "#ffffff", (12, 5)),
+            ("Send.TButton", COL_SUCCESS, COL_SUCCESS_HOVER, "#ffffff", (6, 2)),
+        )
+        for name, fill, hover, fg, pad in buttons:
+            style.configure(name, background=fill, foreground=fg, bordercolor=fill,
+                            lightcolor=fill, darkcolor=fill, focuscolor=fill,
+                            padding=pad, relief="flat")
+            active = [("pressed", hover), ("active", hover)]
+            style.map(name, background=active, lightcolor=active, darkcolor=active,
+                      bordercolor=active, foreground=[("disabled", COL_DISABLED)])
 
         # matrix labels
-        style.configure("Header.TLabel", background=COL_CARD, foreground=COL_ACCENT,
+        style.configure("Header.TLabel", background=COL_CARD, foreground=COL_ACCENT_TEXT,
                         font=self.bold_font)
         style.configure("Packet.TLabel", background=COL_CARD, foreground=COL_MUTED,
                         font=self.bold_font)
@@ -219,9 +225,28 @@ class SerialSimulator(tk.Tk):
         style.configure("Status.TLabel", background=COL_STATUS_BG, foreground=COL_STATUS_FG,
                         padding=(8, 4))
 
-        # scrollbar
-        style.configure("TScrollbar", background=COL_BG, troughcolor=COL_BG,
-                        bordercolor=COL_BG, arrowcolor=COL_TEXT)
+        # scrollbar: thumb in the button grey over the window background
+        style.configure("TScrollbar", background=COL_BTN, troughcolor=COL_BG,
+                        bordercolor=COL_BG, lightcolor=COL_BTN, darkcolor=COL_BTN,
+                        arrowcolor=COL_TEXT)
+        style.map("TScrollbar", background=[("active", COL_BTN_HOVER)])
+
+    def _dark_title_bar(self):
+        """Ask Windows 10/11 to draw this window's title bar dark (no-op elsewhere)."""
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+            self.update_idletasks()  # make sure the native window exists
+            hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
+            value = ctypes.c_int(1)
+            # DWMWA_USE_IMMERSIVE_DARK_MODE is 20 on current builds, 19 on early Win10
+            for attr in (20, 19):
+                if ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                        hwnd, attr, ctypes.byref(value), ctypes.sizeof(value)) == 0:
+                    break
+        except Exception:
+            pass
 
     def _build_ui(self):
         # header banner
@@ -335,8 +360,9 @@ class SerialSimulator(tk.Tk):
     def refresh_ports(self):
         ports = [p.device for p in serial.tools.list_ports.comports()]
         self.port_combo['values'] = ports
-        if ports:
-            self.port_combo.current(0)
+        # never auto-pick a port: keep the user's choice if it's still present, else blank
+        if self.port_var.get() not in ports:
+            self.port_var.set('')
 
     def toggle_open(self):
         if self.serial_port and self.serial_port.is_open:
@@ -404,7 +430,7 @@ class SerialSimulator(tk.Tk):
         self.select_all_chk = tk.Checkbutton(
             self.matrix_frame, text="On", variable=self.select_all_var,
             command=self._toggle_all_rows, bg=COL_CARD, activebackground=COL_CARD,
-            selectcolor=COL_CARD, fg=COL_ACCENT, activeforeground=COL_ACCENT,
+            selectcolor=COL_FIELD, fg=COL_ACCENT_TEXT, activeforeground=COL_ACCENT_TEXT,
             font=self.bold_font, highlightthickness=0, bd=0, padx=0, pady=0,
             takefocus=0)
         self.select_all_chk.grid(row=0, column=0, padx=(6, 2), pady=4)
@@ -431,7 +457,8 @@ class SerialSimulator(tk.Tk):
             enabled_var.trace_add('write', lambda *_: self._sync_select_all())
             chk = tk.Checkbutton(self.matrix_frame, variable=enabled_var,
                                  bg=COL_CARD, activebackground=COL_CARD,
-                                 selectcolor=COL_CARD, highlightthickness=0,
+                                 selectcolor=COL_FIELD, fg=COL_TEXT,
+                                 activeforeground=COL_TEXT, highlightthickness=0,
                                  bd=0, padx=0, pady=0, takefocus=0)
             chk.grid(row=r+1, column=0, padx=(6, 2), pady=1)
             self.enabled_vars.append(enabled_var)
@@ -505,7 +532,7 @@ class SerialSimulator(tk.Tk):
             return
         data, notes = self._collect_data_cells()
         config = {
-            'port': self.port_var.get(),
+            # COM port deliberately not saved -- it's chosen fresh each session
             'baud': self.baud_var.get(),
             'parity': self.parity_var.get(),
             'stopbits': self.stop_var.get(),
@@ -542,7 +569,10 @@ class SerialSimulator(tk.Tk):
         data = config.get('data', [])
         notes = config.get('notes', [])
         # apply serial settings (fall back to current values if missing)
-        self.port_var.set(config.get('port', self.port_var.get()))
+        # the COM port is never restored from a config; leave it blank to be chosen
+        # (unless a port is open right now, so the field keeps showing what's connected)
+        if not (self.serial_port and self.serial_port.is_open):
+            self.port_var.set('')
         self.baud_var.set(str(config.get('baud', self.baud_var.get())))
         self.parity_var.set(config.get('parity', self.parity_var.get()))
         self.stop_var.set(str(config.get('stopbits', self.stop_var.get())))

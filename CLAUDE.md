@@ -91,9 +91,15 @@ Concepts that span the code:
 - **Thread/UI safety.** The worker runs off the Tk main thread, so it marshals UI updates back
   with `self.after(0, ...)` (response fields) and surfaces errors via `_safe_messagebox()`.
 
-- **Save/Load config.** `save_config()`/`load_config()` persist serial settings, matrix size,
-  byte data, notes, and the per-row `enabled` ticks as JSON (CRC excluded — recomputed on
-  load). Configs predating the tick have no `enabled` key, so every row loads ticked. Dialogs default to
+- **COM port is never pre-selected.** The port field starts blank at launch and
+  `refresh_ports()` never auto-picks one (it keeps the current choice only if that port still
+  exists, else blanks it). The port is also **not saved** in configs, and loading a config
+  blanks the field (unless a port is currently open) so it's always chosen fresh.
+
+- **Save/Load config.** `save_config()`/`load_config()` persist serial settings (baud,
+  parity, stop bits — *not* the COM port), matrix size, byte data, notes, and the per-row
+  `enabled` ticks as JSON (CRC excluded — recomputed on load). A `port` key in older configs
+  is ignored. Configs predating the tick have no `enabled` key, so every row loads ticked. Dialogs default to
   `CONFIG_DIR` = `<APP_DIR>/ConfigFiles`, auto-created at startup. `APP_DIR` is
   frozen-aware: the folder containing `app.exe` when running as a PyInstaller exe
   (via `sys.executable`, since `__file__`/`sys._MEIPASS` points at a temp extraction
@@ -101,20 +107,30 @@ Concepts that span the code:
   `ConfigFiles` folder together so saved configs are always found.
 
 - **Theming.** `_apply_theme()` (called before `_build_ui`) sets the `clam` ttk theme and a
-  **mid-grey palette** via module-level `COL_*` constants and named `ttk.Style`s. Greys run
-  `COL_BG` (window, darkest) < `COL_CARD` (cards/input fields) with `COL_BORDER` between them,
-  and `COL_BTN`/`COL_BTN_HOVER` for neutral buttons. A muted blue (`COL_ACCENT`) is the primary
-  accent (banner, Open, Apply Matrix Size, headers), with `COL_ACCENT_SOFT` for light detail on
-  it (the banner version label); a desaturated green (`COL_SUCCESS`) marks "go" actions
-  (`Success.TButton` for Send All, `Send.TButton` for per-row Send) and `COL_STATUS_BG`/`_FG`
-  tint the status bar; red (`COL_DANGER`) is Stop. Other styles: `Header.TLabel`,
-  `Packet.TLabel`, `Crc.TEntry`, `Resp.TEntry`, `Status.TLabel`, banner styles. The Response
-  field swaps between `Resp.TEntry` (grey-blue, reply received) and `RespErr.TEntry`
-  (grey-red + `COL_RESP_ERR_FG`, `(no response)`) in `_set_response()`. Every colour lives in
-  the palette except `#ffffff` text on the coloured accent/danger/success fills. Styles are
-  defined once here; `build_matrix` only references them by name. The UI is laid out as
-  `ttk.LabelFrame` cards (Connection / Matrix & Config / Send) under the header banner. To
-  restyle, edit the palette constants or `_apply_theme`, not the per-widget construction.
+  **dark palette** via module-level `COL_*` constants and named `ttk.Style`s. Surfaces run
+  `COL_BG` (window, darkest) < `COL_CARD` (cards) < `COL_FIELD` (input fields), with
+  `COL_BORDER` lines and `COL_BTN`/`COL_BTN_HOVER` for neutral buttons; text is `COL_TEXT`
+  / `COL_MUTED`. A muted blue (`COL_ACCENT`) fills the banner, Open and Apply Matrix Size,
+  while `COL_ACCENT_TEXT` is the lighter blue used for accent-coloured *text* on dark surfaces
+  (card titles, matrix headers) and `COL_ACCENT_SOFT` is light detail on the accent fill (the
+  banner version label). A desaturated green (`COL_SUCCESS`) marks "go" actions
+  (`Success.TButton` for Send All, `Send.TButton` for per-row Send), `COL_STATUS_BG`/`_FG`
+  tint the status bar, and red (`COL_DANGER`) is Stop. Buttons are configured from one table
+  in `_apply_theme`. Clam draws bevels with `lightcolor`/`darkcolor`, which default to
+  near-white, so those are pinned to the surface colours everywhere (otherwise bright edges
+  appear on dark widgets); entries also set `insertcolor` so the text cursor is visible. The
+  classic `tk.Checkbutton` ticks draw the checkmark in `fg` over a `selectcolor` box, so both
+  must be set for a visible tick. `_dark_title_bar()` asks Windows (DWM attribute 20, falling
+  back to 19) for a dark native title bar; it's a silent no-op elsewhere. Native dialogs
+  (messageboxes, file pickers) follow Windows, not this palette. Other styles:
+  `Header.TLabel`, `Packet.TLabel`, `Crc.TEntry`, `Resp.TEntry`, `Status.TLabel`, banner
+  styles. The Response field swaps between `Resp.TEntry` (dark blue-grey, reply received) and
+  `RespErr.TEntry` (dark red + `COL_RESP_ERR_FG`, `(no response)`) in `_set_response()`.
+  Every colour lives in the palette except `#ffffff` text on the coloured accent/danger/success
+  fills. Styles are defined once here; `build_matrix` only references them by name. The UI is
+  laid out as `ttk.LabelFrame` cards (Connection / Matrix & Config / Send) under the header
+  banner. To restyle, edit the palette constants or `_apply_theme`, not the per-widget
+  construction.
 
 - **App name / version.** Module-level `APP_NAME` and `APP_VERSION` feed both the window
   title and the header banner, where the version renders as a small muted label
