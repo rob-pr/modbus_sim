@@ -40,6 +40,18 @@ Concepts that span the code:
   *all* matrix-frame children (so stale headers/labels don't linger) but first snapshots the
   data cells, notes, and tick states and restores them — resizing never wipes user input.
 
+- **Wheel scrolling.** `<MouseWheel>` (and X11 `<Button-4/5>`) is bound app-wide with
+  `bind_all`, and `_on_mousewheel()` scrolls the matrix canvas only when the pointer is over
+  the canvas or any widget inside it (checked via `winfo_containing` + widget path prefix),
+  ~3 rows per notch. Elsewhere the event passes through untouched, so comboboxes/spinboxes
+  keep their own wheel behaviour. It does nothing when the whole matrix already fits.
+  `_update_scrollregion()` (on `<Configure>` of both the canvas and `matrix_frame`) keeps the
+  scroll region at least as tall as the *visible* canvas (height minus highlight/border
+  inset) — a smaller region lets Tk nudge the content a few pixels — and packs the
+  scrollbar (`self.vsb`) only while the matrix overflows, snapping back to the top otherwise.
+  The scrollbar is a slim custom layout (trough + thumb, no arrows); its thumb element is
+  borrowed from the `default` theme because clam's thumb always draws grip lines.
+
 - **Per-row "On" tick.** `enabled_vars` holds one `BooleanVar` per row, and only ticked rows
   are sent by **Send All Checked**; a row's own **Send** button ignores the tick entirely, so
   unticked packets stay available for manual one-off sends. New rows default to ticked (both at

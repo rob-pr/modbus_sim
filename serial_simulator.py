@@ -225,11 +225,21 @@ class SerialSimulator(tk.Tk):
         style.configure("Status.TLabel", background=COL_STATUS_BG, foreground=COL_STATUS_FG,
                         padding=(8, 4))
 
-        # scrollbar: thumb in the button grey over the window background
-        style.configure("TScrollbar", background=COL_BTN, troughcolor=COL_BG,
-                        bordercolor=COL_BG, lightcolor=COL_BTN, darkcolor=COL_BTN,
-                        arrowcolor=COL_TEXT)
-        style.map("TScrollbar", background=[("active", COL_BTN_HOVER)])
+        # scrollbar: slim flat thumb, no arrow buttons. clam's own thumb always draws
+        # "grip" lines, so the thumb element is borrowed from the plain default theme.
+        try:
+            style.element_create("Flat.Vertical.Scrollbar.thumb", "from", "default")
+        except tk.TclError:
+            pass  # already created (e.g. a second instance in the same interpreter)
+        style.layout("Vertical.TScrollbar", [
+            ("Vertical.Scrollbar.trough", {"sticky": "ns", "children": [
+                ("Flat.Vertical.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})]})])
+        style.configure("Vertical.TScrollbar", background=COL_BTN_HOVER, troughcolor=COL_CARD,
+                        bordercolor=COL_CARD, borderwidth=0, relief="flat", width=10,
+                        arrowsize=10)
+        style.map("Vertical.TScrollbar",
+                  background=[("pressed", COL_MUTED), ("active", COL_MUTED)],
+                  relief=[("pressed", "flat"), ("active", "flat")])
 
     def _dark_title_bar(self):
         """Ask Windows 10/11 to draw this window's title bar dark (no-op elsewhere)."""
@@ -319,13 +329,20 @@ class SerialSimulator(tk.Tk):
                                 highlightbackground=COL_BORDER)
         self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        vsb = ttk.Scrollbar(mid, orient="vertical", command=self.canvas.yview)
-        vsb.pack(side=tk.RIGHT, fill=tk.Y)
-        self.canvas.configure(yscrollcommand=vsb.set)
+        # packed/unpacked by _update_scrollregion: only shown when the matrix overflows
+        self.vsb = ttk.Scrollbar(mid, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.vsb.set)
 
         self.matrix_frame = ttk.Frame(self.canvas, style="Card.TFrame")
         self.canvas.create_window((0,0), window=self.matrix_frame, anchor='nw')
-        self.matrix_frame.bind('<Configure>', lambda e: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
+        self.matrix_frame.bind('<Configure>', self._update_scrollregion)
+        self.canvas.bind('<Configure>', self._update_scrollregion)
+        # wheel scrolls the matrix whenever the pointer is anywhere over it (cells,
+        # labels, buttons), not just the scrollbar; bound app-wide because the cells
+        # would otherwise swallow the event, and filtered in _on_mousewheel.
+        self.bind_all('<MouseWheel>', self._on_mousewheel)
+        self.bind_all('<Button-4>', self._on_mousewheel)  # X11 wheel up
+        self.bind_all('<Button-5>', self._on_mousewheel)  # X11 wheel down
 
         # Send card: send controls
         bot = ttk.LabelFrame(self, text="Send", style="Card.TLabelframe", padding=10)
@@ -356,6 +373,46 @@ class SerialSimulator(tk.Tk):
         self.entry_widgets = []  # list of lists
         self.build_matrix()
         self.refresh_ports()
+
+    def _update_scrollregion(self, _event=None):
+        """Fit the scroll region to the matrix and show the scrollbar only if it overflows.
+
+        The region is never shorter than the visible canvas: a region smaller than the
+        view lets Tk nudge the content up and down even though nothing needs scrolling.
+        """
+        content_w = self.matrix_frame.winfo_reqwidth()
+        content_h = self.matrix_frame.winfo_reqheight()
+        # visible height excludes the canvas border/highlight ring drawn inside it
+        inset = int(self.canvas.cget('highlightthickness')) + int(self.canvas.cget('bd'))
+        view_h = self.canvas.winfo_height() - 2 * inset
+        overflows = content_h > view_h
+        self.canvas.configure(scrollregion=(0, 0, content_w, max(content_h, view_h)))
+        if overflows and not self.vsb.winfo_manager():
+            self.vsb.pack(side=tk.RIGHT, fill=tk.Y, padx=(2, 0), before=self.canvas)
+        elif not overflows:
+            if self.vsb.winfo_manager():
+                self.vsb.pack_forget()
+            self.canvas.yview_moveto(0)
+
+    def _on_mousewheel(self, event):
+        """Scroll the matrix canvas if the pointer is over it or any widget inside it."""
+        widget = self.winfo_containing(event.x_root, event.y_root)
+        canvas_path = str(self.canvas)
+        if widget is None or not (str(widget) == canvas_path
+                                  or str(widget).startswith(canvas_path + '.')):
+            return
+        # nothing to scroll when the whole matrix already fits
+        if self.canvas.yview() == (0.0, 1.0):
+            return
+        if event.num == 4:
+            steps = -1
+        elif event.num == 5:
+            steps = 1
+        else:
+            # Windows reports multiples of 120 per notch; touchpads send smaller deltas
+            steps = -max(1, abs(event.delta) // 120) * (1 if event.delta > 0 else -1)
+        self.canvas.yview_scroll(steps * 3, 'units')  # ~3 rows per notch
+        return 'break'
 
     def refresh_ports(self):
         ports = [p.device for p in serial.tools.list_ports.comports()]
